@@ -2,58 +2,49 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	mp3 "github.com/hajimehoshi/go-mp3"
 	"github.com/hajimehoshi/oto"
 )
 
-const baseURL = "http://data.fixer.io/api/"
-const latestEndpoint = "latest"
-const convertEndpoint = "convert"
+const baseURL = "http://free.currencyconverterapi.com/api"
+const apiVersion = "/v5"
+const convertEndpoint = "/convert"
 const currency = "ARS"
 const baseCurrency = "USD"
-const amountToConvert = "1"
-const accessKey = "c1685baafe05822358c74bad1c35c550"
+const currencyValueKey = "val"
 
 func main() {
+	lastCurrency := FetchCurrency(baseCurrency, currency)
 	t := time.NewTicker(time.Hour)
+	log.Println("Currency:" + strconv.FormatFloat(lastCurrency, 'f', 6, 64))
 	for {
-		yesterday := time.Now().Local().AddDate(0, 0, -1)
-		yesterString := yesterday.Format("2006-01-02")
-		requestToday := baseURL + latestEndpoint + "?access_key=" + accessKey + "&symbols=" + currency
-		requestYesterday := baseURL + yesterString + "?access_key=" + accessKey + "&symbols=" + currency
-		MakeRequest(requestToday, requestYesterday)
 		<-t.C
+		newCurrency := FetchCurrency(baseCurrency, currency)
+		log.Println("Currency:" + strconv.FormatFloat(newCurrency, 'f', 6, 64))
+		soundAlarm(newCurrency > lastCurrency)
+		lastCurrency = newCurrency
 	}
 }
 
 // Platica structures the response for currency values requests
+//{"USD_ARS":{"val":36.6014}}
 type Platica struct {
-	Success   bool               `json:"success"`
-	Timestamp int                `json:"timestamp"`
-	Base      string             `json:"base"`
-	Date      string             `json:"date"`
-	Rates     map[string]float64 `json:"rates"`
+	Rate map[string]float64 `json:"USD_ARS"`
 }
 
-//{"success":true,"timestamp":1539268446,"base":"EUR","date":"2018-10-11","rates":{"ARS":42.65679}}
-
-// MakeRequest asks for stuff
-func MakeRequest(requestToday string, requestYesterday string) {
+// GetRequest from external API
+func GetRequest(url string, queryParams string) Platica {
 	client := http.Client{}
+	completeRequest := url + "?" + queryParams
 
-	request, err := http.NewRequest("GET", requestToday, nil)
-	if err != nil {
-		log.Fatalln(err)
-	}
-
-	request2, err := http.NewRequest("GET", requestYesterday, nil)
+	request, err := http.NewRequest("GET", completeRequest, nil)
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -63,66 +54,29 @@ func MakeRequest(requestToday string, requestYesterday string) {
 		log.Fatalln(err)
 	}
 
-	respYesterday, err2 := client.Do(request2)
-	if err2 != nil {
-		log.Fatalln(err)
-	}
-
 	defer resp.Body.Close()
-	defer respYesterday.Body.Close()
 
 	var platicaHoy Platica
-	var platicaAyer Platica
-
 	err = json.NewDecoder(resp.Body).Decode(&platicaHoy)
 	if err != nil {
 		panic(err)
 	}
-
-	err = json.NewDecoder(respYesterday.Body).Decode(&platicaAyer)
-	if err != nil {
-		panic(err)
-	}
-	if platicaHoy.Rates["ARS"] >= platicaAyer.Rates["ARS"] {
-		soundAlarm()
-	} else if platicaHoy.Rates["ARS"] < platicaAyer.Rates["ARS"] {
-		soundGoodAlarm()
-	}
-	log.Println("TODAY")
-	log.Println(platicaHoy.Rates["ARS"])
-	log.Println("YESTERDAY")
-	log.Println(platicaAyer.Rates["ARS"])
+	return platicaHoy
 }
 
-func soundAlarm() error {
-	f, err := os.Open("dollar_alert.mp3")
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	d, err := mp3.NewDecoder(f)
-	if err != nil {
-		return err
-	}
-	defer d.Close()
-
-	p, err := oto.NewPlayer(d.SampleRate(), 2, 2, 8192)
-	if err != nil {
-		return err
-	}
-	defer p.Close()
-
-	fmt.Printf("Length: %d[bytes]\n", d.Length())
-
-	if _, err := io.Copy(p, d); err != nil {
-		return err
-	}
-	return nil
+// FetchCurrency gets latest currency from the external API
+func FetchCurrency(baseCurrency string, currencyString string) float64 {
+	queryParams := "q=" + baseCurrency + "_" + currency + "&compact=y"
+	platica := GetRequest(baseURL+apiVersion+convertEndpoint, queryParams)
+	return platica.Rate[currencyValueKey]
 }
 
-func soundGoodAlarm() error {
+func soundAlarm(devaluation bool) error {
 	f, err := os.Open("very_nice.mp3")
+	if devaluation {
+		f, err = os.Open("dollar_alert.mp3")
+	}
+
 	if err != nil {
 		return err
 	}
@@ -139,8 +93,6 @@ func soundGoodAlarm() error {
 		return err
 	}
 	defer p.Close()
-
-	fmt.Printf("Length: %d[bytes]\n", d.Length())
 
 	if _, err := io.Copy(p, d); err != nil {
 		return err
