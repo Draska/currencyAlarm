@@ -22,7 +22,7 @@ const currencyValueKey = "val"
 
 func main() {
 	lastCurrency := FetchCurrency(baseCurrency, currency)
-	t := time.NewTicker(time.Hour)
+	t := time.NewTicker(30 * time.Minute)
 	log.Println("Currency:" + strconv.FormatFloat(lastCurrency, 'f', 6, 64))
 	for {
 		<-t.C
