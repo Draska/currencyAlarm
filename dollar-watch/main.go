@@ -18,22 +18,25 @@ import (
 	"github.com/hajimehoshi/oto"
 )
 
-const baseURL = "http://free.currencyconverterapi.com/api"
-const apiVersion = "/v5"
-const convertEndpoint = "/convert"
-const currency = "ARS"
-const baseCurrency = "USD"
-const currencyValueKey = "val"
+const (
+	baseURL          = "http://free.currencyconverterapi.com/api"
+	apiVersion       = "/v5"
+	convertEndpoint  = "/convert"
+	currency         = "ARS"
+	baseCurrency     = "USD"
+	currencyValueKey = "val"
+	currencyFile     = "currency.txt"
+)
 
 var lastCurrency = FetchCurrency(baseCurrency, currency)
 
 func init() {
-	if _, err := os.Stat("currency.txt"); os.IsNotExist(err) {
+	if _, err := os.Stat(currencyFile); os.IsNotExist(err) {
 
 	} else {
 		// read file for lastCurrency
 		fmt.Println("\nreading currency")
-		f, err := ioutil.ReadFile("currency.txt")
+		f, err := ioutil.ReadFile(currencyFile)
 		if err != nil {
 			panic(err)
 		}
@@ -46,7 +49,7 @@ func init() {
 
 func main() {
 	go handleDeath(lastCurrency)
-	t := time.NewTicker(10 * time.Second)
+	t := time.NewTicker(30 * time.Minute)
 	fmt.Println("Currency:" + strconv.FormatFloat(lastCurrency, 'f', 6, 64))
 	for {
 		<-t.C
@@ -131,7 +134,7 @@ func handleDeath(lastCurrency float64) {
 	sig := <-gracefulStop
 	fmt.Printf("\n Caught sig: %+v", sig)
 	fmt.Println("\n Writing last update on a piece of paper")
-	err := ioutil.WriteFile("currency.txt", []byte(fmt.Sprintf("%s\n", strconv.FormatFloat(lastCurrency, 'f', 6, 64))), 0666)
+	err := ioutil.WriteFile(currencyFile, []byte(fmt.Sprintf("%s\n", strconv.FormatFloat(lastCurrency, 'f', 6, 64))), 0666)
 	if err != nil {
 		log.Fatal(err)
 	}
