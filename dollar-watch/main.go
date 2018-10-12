@@ -2,11 +2,16 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
+	"strings"
+	"syscall"
 	"time"
 
 	mp3 "github.com/hajimehoshi/go-mp3"
@@ -20,14 +25,33 @@ const currency = "ARS"
 const baseCurrency = "USD"
 const currencyValueKey = "val"
 
+var lastCurrency = FetchCurrency(baseCurrency, currency)
+
+func init() {
+	if _, err := os.Stat("currency.txt"); os.IsNotExist(err) {
+
+	} else {
+		// read file for lastCurrency
+		fmt.Println("\nreading currency")
+		f, err := ioutil.ReadFile("currency.txt")
+		if err != nil {
+			panic(err)
+		}
+		lastCurrency, err = strconv.ParseFloat(strings.TrimSpace(string(f)), 64)
+		if err != nil {
+			panic(err)
+		}
+	}
+}
+
 func main() {
-	lastCurrency := FetchCurrency(baseCurrency, currency)
-	t := time.NewTicker(30 * time.Minute)
-	log.Println("Currency:" + strconv.FormatFloat(lastCurrency, 'f', 6, 64))
+	go handleDeath(lastCurrency)
+	t := time.NewTicker(10 * time.Second)
+	fmt.Println("Currency:" + strconv.FormatFloat(lastCurrency, 'f', 6, 64))
 	for {
 		<-t.C
 		newCurrency := FetchCurrency(baseCurrency, currency)
-		log.Println("Currency:" + strconv.FormatFloat(newCurrency, 'f', 6, 64))
+		fmt.Println("Currency:" + strconv.FormatFloat(newCurrency, 'f', 6, 64))
 		soundAlarm(newCurrency > lastCurrency)
 		lastCurrency = newCurrency
 	}
@@ -98,4 +122,19 @@ func soundAlarm(devaluation bool) error {
 		return err
 	}
 	return nil
+}
+
+func handleDeath(lastCurrency float64) {
+	var gracefulStop = make(chan os.Signal)
+	signal.Notify(gracefulStop, syscall.SIGTERM)
+	signal.Notify(gracefulStop, syscall.SIGINT)
+	sig := <-gracefulStop
+	fmt.Printf("\n Caught sig: %+v", sig)
+	fmt.Println("\n Writing last update on a piece of paper")
+	err := ioutil.WriteFile("currency.txt", []byte(fmt.Sprintf("%s\n", strconv.FormatFloat(lastCurrency, 'f', 6, 64))), 0666)
+	if err != nil {
+		log.Fatal(err)
+	}
+	soundAlarm(true)
+	os.Exit(0)
 }
