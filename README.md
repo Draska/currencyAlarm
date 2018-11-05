@@ -1,3 +1,5 @@
+[![Go Report Card](https://goreportcard.com/badge/github.com/Draska/currencyAlarm)](https://goreportcard.com/report/github.com/Draska/currencyAlarm)
+
 go get dependencies!
 then
 run `go install`
